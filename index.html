@@ -21,7 +21,6 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Paddock Draw – Paddock &amp; Fence Line Mapping Tool">
 <meta name="twitter:description" content="Free online paddock and fence mapping tool. Draw paddocks on satellite maps, measure fence lengths, bearings and areas in hectares or acres, and export coordinates to CSV, KML and GeoJSON.">
-<script data-goatcounter="https://malone.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebApplication","name":"Paddock Draw","url":"https://www.paddockdraw.com/",
  "applicationCategory":"UtilitiesApplication","operatingSystem":"Any (web browser)",
@@ -2296,19 +2295,21 @@ function renderMeasure(cursor) {
   L.polyline(path, { color: '#111', weight: 6, interactive: false }).addTo(measureLayer);
   L.polyline(path, { color: '#fff', weight: 2.5, dashArray: '8 6', interactive: false }).addTo(measureLayer);
   M.pts.forEach(p => L.circleMarker(p, { radius: 5, color: '#111', weight: 2, fillColor: '#fff', fillOpacity: 1, interactive: false }).addTo(measureLayer));
+  const liveSeg = cursor && !M.done && !M.closed;
   for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1], b = path[i];
-    const pa = map.latLngToLayerPoint(a), pb = map.latLngToLayerPoint(b);
-    if (pa.distanceTo(pb) < 60) continue;
-    let ang = Math.atan2(pb.y - pa.y, pb.x - pa.x) / DEG;
-    if (ang > 90) ang -= 180; if (ang < -90) ang += 180;
-    divMarker({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 },
-      `<div class="slabel" style="transform:translate(-50%,-50%) rotate(${ang.toFixed(1)}deg) translateY(-13px)">${fmtMapLen(vincenty(a, b).d)}</div>`).addTo(measureLayer);
+    const isLive = liveSeg && i === path.length - 1;
+    lengthLabel(path[i - 1], path[i], measureLayer, -13, isLive ? 'live' : '');
   }
-  if (!M.done) {
-    const n = M.pts.length;
-    $('#mbMsg').innerHTML = `<b>${fmtM(pathLength(path))} ${LU()}</b> · ${n} point${n === 1 ? '' : 's'}${n >= 3 ? ' · click the first point to measure an area' : ''}`;
-  }
+  if (!M.done) $('#mbMsg').innerHTML = measureMsg(cursor);
+}
+/** Same wording as the draw tool: points, total so far (to the mouse) and the line being drawn. */
+function measureMsg(cursor) {
+  const M = state.measure, n = M ? M.pts.length : 0;
+  const live = cursor && n && !M.done ? cursor : null;
+  const total = pathLength(measurePath(live || undefined));
+  const line = live ? vincenty(M.pts[n - 1], live).d : null;
+  return `<b>${n}</b> point${n === 1 ? '' : 's'} · total <b>${fmtM(total)} ${LU()}</b>` +
+    (line != null ? ` · this line <b>${fmtM(line)} ${LU()}</b>` : '');
 }
 function updateMeasureBanner() {
   const b = $('#mbanner');
@@ -2330,7 +2331,7 @@ function updateMeasureBanner() {
   } else if (M.done) {
     $('#mbMsg').innerHTML = `Distance <b>${fmtM(len)} ${LU()}</b> · ${n - 1} segment${n === 2 ? '' : 's'} · click to start a new measurement`;
   } else {
-    $('#mbMsg').innerHTML = `<b>${fmtM(len)} ${LU()}</b> · ${n} point${n === 1 ? '' : 's'}${n >= 3 ? ' · click the first point to measure an area' : ''}`;
+    $('#mbMsg').innerHTML = measureMsg();
   }
 }
 $('#bMeasure').onclick = () => setMode(state.mode === 'measure' ? 'view' : 'measure');
